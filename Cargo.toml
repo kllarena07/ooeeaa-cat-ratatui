@@ -4,5 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+image = "0.25.8"
 ratatui = "0.29.0"
 ratatui-image = "8.0.2"
