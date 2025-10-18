@@ -1,32 +1,27 @@
-// use std::{thread, time::Duration};
-
-// fn main() {
-//     let frame_duration = Duration::from_millis(1000 / 30); // 30 FPS
-
-//     for count in 0..=103 {
-//         println!("{}", count);
-//         thread::sleep(frame_duration);
-//     }
-// }
-
-use crossterm::event::KeyCode;
-use ratatui::{DefaultTerminal, Frame};
+use ratatui::{DefaultTerminal, Frame, text::Text};
 use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
-use std::io;
+use std::{io, thread, time::Duration};
+
+fn import_all_images() -> Vec<StatefulProtocol> {
+    let mut image_protocol_collection: Vec<StatefulProtocol> = vec![];
+    for count in 0..=102 {
+        let picker = Picker::from_fontsize((8, 12));
+        let path = format!("./images/frame_{}.png", count);
+        let dyn_img = image::ImageReader::open(path).unwrap().decode().unwrap();
+        let image = picker.new_resize_protocol(dyn_img);
+        image_protocol_collection.push(image);
+    }
+    image_protocol_collection
+}
 
 fn main() -> io::Result<()> {
     let mut terminal = ratatui::init();
 
-    let picker = Picker::from_fontsize((8, 12));
-    let dyn_img = image::ImageReader::open("./images/frame_0.png")
-        .unwrap()
-        .decode()
-        .unwrap();
-    let image = picker.new_resize_protocol(dyn_img);
+    let collection = import_all_images();
 
     let mut app = App {
         running: true,
-        image,
+        collection,
     };
 
     let app_result = app.run(&mut terminal);
@@ -37,37 +32,32 @@ fn main() -> io::Result<()> {
 
 pub struct App {
     running: bool,
-    image: StatefulProtocol,
+    collection: Vec<StatefulProtocol>,
 }
 
 impl App {
     fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         while self.running {
-            match crossterm::event::read()? {
-                crossterm::event::Event::Key(key_event) => self.handle_key_event(key_event)?,
-                _ => {}
-            }
+            let frame_duration = Duration::from_millis(1000 / 30); // 30 FPS
 
-            terminal.draw(|frame| self.draw(frame))?;
+            for count in 0..=102 {
+                terminal.draw(|frame| self.draw(frame, count))?;
+                thread::sleep(frame_duration);
+            }
         }
 
-        self.image.last_encoding_result();
+        let _ = self
+            .collection
+            .iter_mut()
+            .map(|image| image.last_encoding_result());
         Ok(())
     }
 
-    fn draw(&mut self, frame: &mut Frame) {
+    fn draw(&mut self, frame: &mut Frame, count: i32) {
+        frame.render_widget(Text::from(count.to_string()), frame.area());
         let image = StatefulImage::default();
-        frame.render_stateful_widget(image, frame.area(), &mut self.image);
-    }
-
-    fn handle_key_event(&mut self, key_event: crossterm::event::KeyEvent) -> io::Result<()> {
-        match key_event.code {
-            KeyCode::Char('q') => {
-                self.running = false;
-            }
-            _ => {}
-        }
-
-        Ok(())
+        let selected_frame = self.collection.get_mut(count as usize).unwrap();
+        frame.render_stateful_widget(image, frame.area(), selected_frame);
+        // EXPECTED: &mut _
     }
 }
