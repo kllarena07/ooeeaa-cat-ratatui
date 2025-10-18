@@ -666,6 +666,7 @@ dependencies = [
  "crossterm 0.29.0",
  "rascii_art",
  "ratatui",
+ "rayon",
 ]
 
 [[package]]
