@@ -6,7 +6,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     widgets::{Block, Paragraph},
 };
-use std::{io, thread, time::Duration};
+use std::{io, sync::mpsc, thread, time::Duration};
 
 fn construct_all_paragraphs<'a>() -> Vec<Paragraph<'a>> {
     let mut paragraph_collection: Vec<Paragraph> = vec![];
@@ -43,61 +43,96 @@ fn main() -> io::Result<()> {
     let mut app = App {
         running: true,
         paragraph_collection,
+        count: 0,
     };
 
-    let app_result = app.run(&mut terminal);
+    let (event_tx, event_rx) = mpsc::channel::<Event>();
+
+    let tx_to_input_events = event_tx.clone();
+    thread::spawn(move || {
+        handle_input_events(tx_to_input_events);
+    });
+
+    let tx_to_counter_events = event_tx.clone();
+    thread::spawn(move || {
+        run_background_thread(tx_to_counter_events);
+    });
+
+    let app_result = app.run(&mut terminal, event_rx);
 
     ratatui::restore();
     app_result
 }
 
+enum Event {
+    Input(crossterm::event::KeyEvent),
+    Counter(usize),
+}
+
+fn handle_input_events(tx: mpsc::Sender<Event>) {
+    loop {
+        match crossterm::event::read().unwrap() {
+            crossterm::event::Event::Key(key_event) => tx.send(Event::Input(key_event)).unwrap(),
+            _ => {}
+        }
+    }
+}
+
+fn run_background_thread(tx: mpsc::Sender<Event>) {
+    let framerate = 60;
+    let frame_duration = Duration::from_millis(1000 / framerate);
+
+    loop {
+        for count in 0..=102 {
+            tx.send(Event::Counter(count)).unwrap();
+            thread::sleep(frame_duration);
+        }
+    }
+}
+
 struct App<'a> {
     running: bool,
     paragraph_collection: Vec<Paragraph<'a>>,
+    count: usize,
 }
 
 impl<'a> App<'a> {
-    fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+    fn run(&mut self, terminal: &mut DefaultTerminal, rx: mpsc::Receiver<Event>) -> io::Result<()> {
         while self.running {
-            // match crossterm::event::read()? {
-            //     crossterm::event::Event::Key(key_event) => self.handle_key_event(key_event)?,
-            //     _ => {}
-            // }
-            let frame_duration = Duration::from_millis(1000 / 60); // 60 FPS
-
-            for count in 0..=102 {
-                terminal.draw(|frame| self.draw(frame, count))?;
-                thread::sleep(frame_duration);
+            match rx.recv().unwrap() {
+                Event::Input(key_event) => self.handle_key_event(key_event)?,
+                Event::Counter(count) => self.count = count,
             }
+
+            terminal.draw(|frame| self.draw(frame))?;
         }
 
         Ok(())
     }
 
-    fn draw(&mut self, frame: &mut Frame, count: u32) {
+    fn draw(&mut self, frame: &mut Frame) {
         let display_area = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![Constraint::Length(1), Constraint::Length(99)])
             .split(frame.area());
         frame.render_widget(
-            Paragraph::new(count.to_string()).block(Block::new()),
+            Paragraph::new(self.count.to_string()).block(Block::new()),
             display_area[0],
         );
 
-        let count_usize = count as usize;
-        let paragraph = &self.paragraph_collection[count_usize];
+        let paragraph = &self.paragraph_collection[self.count];
 
         frame.render_widget(paragraph, display_area[1]);
     }
 
-    // fn handle_key_event(&mut self, key_event: crossterm::event::KeyEvent) -> io::Result<()> {
-    //     match key_event.code {
-    //         KeyCode::Char('q') => {
-    //             self.running = false;
-    //         }
-    //         _ => {}
-    //     }
+    fn handle_key_event(&mut self, key_event: crossterm::event::KeyEvent) -> io::Result<()> {
+        match key_event.code {
+            KeyCode::Char('q') => {
+                self.running = false;
+            }
+            _ => {}
+        }
 
-    //     Ok(())
-    // }
+        Ok(())
+    }
 }
