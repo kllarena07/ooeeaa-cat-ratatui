@@ -1,43 +1,41 @@
 use ansi_to_tui::IntoText as _;
 use crossterm::event::KeyCode;
 use rascii_art::{RenderOptions, charsets, render_to};
-use rayon::prelude::*;
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Direction, Layout},
     widgets::{Block, Paragraph},
 };
+use rayon::prelude::*;
 use std::{io, sync::mpsc, thread, time::Duration};
 
 fn construct_all_paragraphs<'a>() -> Vec<Paragraph<'a>> {
     println!("Loading frames in parallel...");
-    
+
     let render_options = RenderOptions::new()
         .width(65)
         .colored(true)
         .charset(charsets::BLOCK);
-    
+
     let mut paragraphs: Vec<_> = (0..=102)
         .into_par_iter()
         .map(|count| {
             let mut buffer = String::new();
             let path = format!("./images/frame_{}.png", count);
-            
+
             match render_to(path, &mut buffer, &render_options) {
-                Ok(_) => {
-                    match buffer.into_text() {
-                        Ok(output) => {
-                            if count % 10 == 0 {
-                                println!("Loaded frame {}/102", count);
-                            }
-                            Some((count, Paragraph::new(output)))
+                Ok(_) => match buffer.into_text() {
+                    Ok(output) => {
+                        if count % 10 == 0 {
+                            println!("Loaded frame {}/102", count);
                         }
-                        Err(e) => {
-                            eprintln!("Failed to convert frame {} to text: {}", count, e);
-                            None
-                        }
+                        Some((count, Paragraph::new(output)))
                     }
-                }
+                    Err(e) => {
+                        eprintln!("Failed to convert frame {} to text: {}", count, e);
+                        None
+                    }
+                },
                 Err(e) => {
                     eprintln!("Failed to render frame {}: {}", count, e);
                     None
@@ -46,13 +44,16 @@ fn construct_all_paragraphs<'a>() -> Vec<Paragraph<'a>> {
         })
         .filter_map(|x| x)
         .collect();
-    
+
     // Sort by frame number to maintain correct order
     paragraphs.sort_by_key(|(count, _)| *count);
-    
-    let result: Vec<Paragraph> = paragraphs.into_iter().map(|(_, paragraph)| paragraph).collect();
+
+    let result: Vec<Paragraph> = paragraphs
+        .into_iter()
+        .map(|(_, paragraph)| paragraph)
+        .collect();
     println!("Finished loading {} frames", result.len());
-    
+
     result
 }
 
