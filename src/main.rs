@@ -21,7 +21,7 @@ fn construct_all_paragraphs<'a>() -> Vec<Paragraph<'a>> {
         .into_par_iter()
         .map(|count| {
             let mut buffer = String::new();
-            let path = format!("./images/frame_{}.png", count);
+            let path = format!("./cat/frame_{}.png", count);
 
             match render_to(path, &mut buffer, &render_options) {
                 Ok(_) => match buffer.into_text() {
